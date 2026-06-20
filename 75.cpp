@@ -3162,10 +3162,10 @@ int main(int argc, char **argv)
      // --- P0: Load fonts via SDL_RWops for Android asset support ---
 #ifdef __ANDROID__
      // On Android, SDL_RWFromFile uses the APK's assets folder
-     SDL_RWops *rw_small = SDL_RWFromFile("assets/font/newspaper.ttf", "rb");
-     SDL_RWops *rw_medium = SDL_RWFromFile("assets/font/good_timing_bd.ttf", "rb");
-     SDL_RWops *rw_large = SDL_RWFromFile("assets/font/Pixel_Game.ttf", "rb");
-     SDL_RWops *rw_gigantic = SDL_RWFromFile("assets/font/KnightWarrior.ttf", "rb");
+     SDL_RWops *rw_small = SDL_RWFromFile("font/newspaper.ttf", "rb");
+     SDL_RWops *rw_medium = SDL_RWFromFile("font/good_timing_bd.ttf", "rb");
+     SDL_RWops *rw_large = SDL_RWFromFile("font/Pixel_Game.ttf", "rb");
+     SDL_RWops *rw_gigantic = SDL_RWFromFile("font/KnightWarrior.ttf", "rb");
      small_font = rw_small ? TTF_OpenFontRW(rw_small, 1, 16) : nullptr;
      medium_font = rw_medium ? TTF_OpenFontRW(rw_medium, 1, 22) : nullptr;
      large_font = rw_large ? TTF_OpenFontRW(rw_large, 1, 30) : nullptr;
@@ -3189,13 +3189,13 @@ int main(int argc, char **argv)
      // --- P0: Load sounds via SDL_RWops for Android ---
 #ifdef __ANDROID__
      #define LOAD_WAV_ANDROID(path) Mix_LoadWAV_RW(SDL_RWFromFile(path, "rb"), 1)
-     snd_roll = LOAD_WAV_ANDROID("assets/sound/roll.wav");
-     snd_move = LOAD_WAV_ANDROID("assets/sound/move.wav");
-     snd_win = LOAD_WAV_ANDROID("assets/sound/win.wav");
-     snd_snake = LOAD_WAV_ANDROID("assets/sound/snake.wav");
-     snd_correct = LOAD_WAV_ANDROID("assets/sound/correct.wav");
-     snd_click = LOAD_WAV_ANDROID("assets/sound/click.wav");
-     snd_error = LOAD_WAV_ANDROID("assets/sound/error.wav");
+     snd_roll = LOAD_WAV_ANDROID("sound/roll.wav");
+     snd_move = LOAD_WAV_ANDROID("sound/move.wav");
+     snd_win = LOAD_WAV_ANDROID("sound/win.wav");
+     snd_snake = LOAD_WAV_ANDROID("sound/snake.wav");
+     snd_correct = LOAD_WAV_ANDROID("sound/correct.wav");
+     snd_click = LOAD_WAV_ANDROID("sound/click.wav");
+     snd_error = LOAD_WAV_ANDROID("sound/error.wav");
      #undef LOAD_WAV_ANDROID
 #else
      snd_roll = Mix_LoadWAV("assets/sound/roll.wav");
@@ -3552,26 +3552,7 @@ int main(int argc, char **argv)
                if (e.type == SDL_MOUSEMOTION)
                     mouse_motion_handle(e.motion.x, e.motion.y);
 
-               // --- Touch support for Android ---
-               if (e.type == SDL_FINGERDOWN)
-               {
-                    // SDL_RenderSetLogicalSize maps coordinates automatically
-                    // But finger events use normalized 0..1 coords, need to convert
-                    int tx = (int)(e.tfinger.x * width);
-                    int ty = (int)(e.tfinger.y * height);
-                    mouse_click_handle(tx, ty);
-               }
-               if (e.type == SDL_FINGERUP)
-               {
-                    if (practice_scrollbar_dragging)
-                         practice_scrollbar_dragging = false;
-               }
-               if (e.type == SDL_FINGERMOTION)
-               {
-                    int tx = (int)(e.tfinger.x * width);
-                    int ty = (int)(e.tfinger.y * height);
-                    mouse_motion_handle(tx, ty);
-               }
+
 
                // --- Android Back Button ---
 #ifdef __ANDROID__
