@@ -13,6 +13,8 @@ android/app/src/main/java/com/snadder/game/SnadderActivity.java
 android/app/src/main/assets/font/
 android/app/src/main/assets/sound/
 android/app/src/main/assets/questions.csv
+android/android-sdk/
+android/cmdline-tools.zip
 
 # SDL2 vendor (cloned by setup script — large, don't commit)
 android/SDL2-vendor/
