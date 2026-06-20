@@ -6,6 +6,7 @@
 #include <cmath>     // sqrt, sin, cos, atan2, hypot
 #include <algorithm> // max, min, shuffle
 #include <random>
+#include <unordered_map> // PERF FIX: needed for text texture cache
 
 using namespace std;
 
@@ -440,20 +441,74 @@ WrappedText wrap_text(const string &text, int max_width, TTF_Font *font, int lin
 }
 
 /* Drawing Helpers */
+
+// PERF FIX (struct moved to file scope, was previously a function-local
+// static inside text_draw -- moved out so the shutdown code at the end of
+// main() can actually reach it to free GPU textures cleanly on exit).
+struct TextCacheEntry { SDL_Texture *tex; int w, h; };
+static std::unordered_map<string, TextCacheEntry> g_textCache;
+constexpr size_t MAX_TEXT_CACHE_ENTRIES = 512;
+
+void destroy_text_cache()
+{
+     for (auto &kv : g_textCache)
+          if (kv.second.tex) SDL_DestroyTexture(kv.second.tex);
+     g_textCache.clear();
+}
+
 void text_draw(const string &text, int x, int y, SDL_Color color, TTF_Font *font = nullptr)
 {
      if (!font)
           font = small_font;
      if (!font)
+     {
+          // FIX: Previously this silently returned, making text invisible
+          // with no clue why. Draw a visible placeholder box instead so a
+          // missing-font bug is obvious during testing instead of looking
+          // like "nothing shows up".
+          SDL_Rect placeholder = {x, y, (int)(text.length() * 8), 14};
+          SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 120);
+          SDL_RenderFillRect(renderer, &placeholder);
           return;
-     SDL_Surface *surf = TTF_RenderUTF8_Blended(font, text.c_str(), color);
-     if (!surf)
-          return;
-     SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-     SDL_Rect dst = {x, y, surf->w, surf->h};
-     SDL_RenderCopy(renderer, tex, nullptr, &dst);
-     SDL_FreeSurface(surf);
-     SDL_DestroyTexture(tex);
+     }
+
+     // PERF FIX: this function previously called TTF_RenderUTF8_Blended +
+     // SDL_CreateTextureFromSurface + SDL_DestroyTexture on EVERY call,
+     // for every label/button/score, every single frame. Creating and
+     // destroying a GPU texture per draw call is one of the most common
+     // causes of bad frame pacing / stutter in SDL games on Android.
+     // Fix: cache the rendered texture keyed by (text, font, color) and
+     // only re-render when the text/font/color actually changes. The
+     // cache is capped and cleared if it grows too large (e.g. if a
+     // screen displays many unique strings like dynamic timers), so this
+     // can't become an unbounded memory leak.
+     char keyBuf[64];
+     snprintf(keyBuf, sizeof(keyBuf), "%p|%u%u%u%u|", (void*)font,
+              (unsigned)color.r, (unsigned)color.g, (unsigned)color.b, (unsigned)color.a);
+     string key = string(keyBuf) + text;
+
+     auto it = g_textCache.find(key);
+     if (it == g_textCache.end())
+     {
+          if (g_textCache.size() >= MAX_TEXT_CACHE_ENTRIES)
+          {
+               // Cache got too large (likely lots of unique dynamic strings
+               // like countdown timers) -- clear it rather than grow forever.
+               destroy_text_cache();
+          }
+          SDL_Surface *surf = TTF_RenderUTF8_Blended(font, text.c_str(), color);
+          if (!surf)
+               return;
+          SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
+          TextCacheEntry entry{tex, surf->w, surf->h};
+          SDL_FreeSurface(surf);
+          if (!tex)
+               return;
+          it = g_textCache.emplace(key, entry).first;
+     }
+
+     SDL_Rect dst = {x, y, it->second.w, it->second.h};
+     SDL_RenderCopy(renderer, it->second.tex, nullptr, &dst);
 }
 
 void center_text_draw(const string &text, int x, int y, SDL_Color color, TTF_Font *font = nullptr)
@@ -487,13 +542,25 @@ void button_draw(SDL_Rect rect, const string &text, SDL_Color bg, SDL_Color fg,
 
 void circle_draw(int cx, int cy, int r, SDL_Color c)
 {
+     SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
      for (int y = -r; y <= r; y++)
      {
-          int w = (int)sqrt(r * r - y * y);
+          int w = (int)sqrt((float)(r * r - y * y));
           SDL_RenderDrawLine(renderer, cx - w, cy + y, cx + w, cy + y);
      }
 }
 
+// PERF NOTE: filled_circle_draw / circle_draw issue one SDL_RenderDrawLine
+// call per scanline (2r+1 calls per circle). This function runs many times
+// per frame (dice dots, snake bodies, player tokens), and on mobile GPUs
+// draw-call count tends to matter more than pixel count. SDL2's plain
+// renderer API has no built-in filled-circle primitive, so a real fix
+// means switching to SDL_RenderGeometry with a pre-built triangle fan, or
+// pre-rendering circles to a texture once and blitting them (much cheaper
+// than redrawing geometry every frame). That's a bigger structural change
+// than is safe to make blind without a device to profile on, so it is not
+// done here — flagging it as the most likely source of any FPS drop you
+// see during gameplay with multiple snakes/tokens on screen.
 void filled_circle_draw(int cx, int cy, int r, SDL_Color col)
 {
      SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
@@ -2383,17 +2450,24 @@ void mouse_click_handle(int x, int y)
                               // mark used for whole game for this player
                               p.usedSkip = true;
 
-                              // load a new question
-                              game.curr_question_index = random_range(0, questions.size() - 1);
-                              game.questionStartTime = SDL_GetTicks();
-                              game.questionTimeLeft = game.questionDefaultTime;
-                              game.questionTimeout = false;
+                              // FIX: questions.size()-1 underflows (size_t) and crashes
+                              // uniform_int_distribution if questions is empty. Guard it.
+                              if (!questions.empty())
+                              {
+                                   // load a new question
+                                   game.curr_question_index = random_range(0, (int)questions.size() - 1);
+                                   if (game.curr_question_index < 0 || game.curr_question_index >= (int)questions.size())
+                                        game.curr_question_index = 0;
+                                   game.questionStartTime = SDL_GetTicks();
+                                   game.questionTimeLeft = game.questionDefaultTime;
+                                   game.questionTimeout = false;
 
-                              // rebuild options
-                              game.question_ui_options.clear();
-                              auto newopts = prepare_options_for_ui(questions[game.curr_question_index], g_questionOptionCount);
-                              game.question_ui_options = newopts.first;
-                              game.question_ui_correct = newopts.second;
+                                   // rebuild options
+                                   game.question_ui_options.clear();
+                                   auto newopts = prepare_options_for_ui(questions[game.curr_question_index], g_questionOptionCount);
+                                   game.question_ui_options = newopts.first;
+                                   game.question_ui_correct = newopts.second;
+                              }
 
                               // return without penalizing
                               return;
@@ -3033,6 +3107,21 @@ bool load_game_state()
      fread(&game.answeredCorrectCount, sizeof(int), 1, fp);
      fread(&game.answeredWrongCount, sizeof(int), 1, fp);
 
+     // FIX (critical crash bug): total_players came straight from a save
+     // file with no validation, then was used as the loop bound below to
+     // index the fixed-size players[4] array. A corrupted, old-format, or
+     // tampered save file could set this to any int (e.g. 50 or negative),
+     // causing an out-of-bounds write and a guaranteed crash. Clamp it.
+     if (game.total_players < 1 || game.total_players > 4)
+     {
+          SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Corrupt save: total_players=%d out of range, aborting load", game.total_players);
+          fclose(fp);
+          return false;
+     }
+     // FIX: also validate game.current the same way, same array.
+     if (game.current < 0 || game.current >= game.total_players)
+          game.current = 0;
+
      for (int i = 0; i < game.total_players; i++)
      {
           fread(&game.players[i].pos, sizeof(int), 1, fp);
@@ -3047,6 +3136,9 @@ bool load_game_state()
                nameBuf[nameLen] = '\0';
                game.players[i].name = string(nameBuf);
           }
+          // FIX: also clamp pos in case of corrupt save data (board is 0..100)
+          if (game.players[i].pos < 0 || game.players[i].pos > 100)
+               game.players[i].pos = 0;
           // Restore colors
           SDL_Color pcolors[] = {colors.p1, colors.p2, colors.p3, colors.p4};
           int offsets[][2] = {{-15, -15}, {15, -15}, {-15, 15}, {15, 15}};
@@ -3055,6 +3147,9 @@ bool load_game_state()
           game.players[i].offsetY = offsets[i][1];
      }
 
+     // FIX: clamp to valid enum range in case of corrupt save data
+     if (state_int < WELCOME || state_int > PRACTICE_MODE)
+          state_int = WELCOME;
      game.state = (State)state_int;
      game.questionState = NO_QUESTION;
      game.moving = false;
@@ -3100,13 +3195,30 @@ int main(int argc, char **argv)
           SDL_Quit();
           return 1;
      }
+     // FIX: Mix_Init() was never called. On Android this can leave WAV/OGG
+     // decoders uninitialized in some SDL_mixer builds, causing silent
+     // audio failure even though Mix_OpenAudio() "succeeds".
+     int mixFlagsRequested = MIX_INIT_OGG;
+     int mixFlagsGot = Mix_Init(mixFlagsRequested);
+     if ((mixFlagsGot & mixFlagsRequested) != mixFlagsRequested)
+     {
+          SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Mix_Init: not all codecs initialized: %s", Mix_GetError());
+     }
+
+     // FIX: Larger buffer on Android (2048 can be too small and cause
+     // crackling/silence on some devices' audio backends).
+#ifdef __ANDROID__
+     if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 4096) != 0)
+#else
      if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) != 0)
+#endif
      {
           SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Mix_OpenAudio Error: %s", Mix_GetError());
           TTF_Quit();
           SDL_Quit();
           return 1;
      }
+     Mix_AllocateChannels(16);
 
      // --- Android: Fullscreen + detect screen size ---
 #ifdef __ANDROID__
@@ -3185,6 +3297,19 @@ int main(int argc, char **argv)
           SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load large_font: %s", TTF_GetError());
      if (!gigantic_font)
           SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load gigantic_font: %s", TTF_GetError());
+
+     // FIX: Fallback chain — if a specific font file failed to load (e.g.
+     // packaging issue with one .ttf), reuse whichever font DID load
+     // instead of leaving that slot nullptr (which made text invisible).
+     {
+          TTF_Font *anyLoaded = small_font ? small_font : (medium_font ? medium_font : (large_font ? large_font : gigantic_font));
+          if (!small_font)    small_font    = anyLoaded;
+          if (!medium_font)   medium_font   = anyLoaded;
+          if (!large_font)    large_font    = anyLoaded;
+          if (!gigantic_font) gigantic_font = anyLoaded;
+          if (!anyLoaded)
+               SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "CRITICAL: No fonts loaded at all. Check assets/font/ packaging in the APK.");
+     }
 
      // --- P0: Load sounds via SDL_RWops for Android ---
 #ifdef __ANDROID__
@@ -3345,6 +3470,15 @@ int main(int argc, char **argv)
 
      // --- P1: Load saved settings ---
      load_settings();
+
+     // FIX: save_game_state() is called when the app backgrounds, but
+     // load_game_state() was never called anywhere — meaning a saved
+     // in-progress match never actually got restored. Wire it up here.
+     if (load_game_state())
+     {
+          SDL_Log("Restored in-progress game from saved state");
+          g_gameStartTime = SDL_GetTicks(); // reset speedrun timer baseline, avoids huge elapsed-time on restore
+     }
 
      bool quit = false;
      SDL_Event e;
@@ -3778,14 +3912,26 @@ int main(int argc, char **argv)
 
      SDL_StopTextInput();
      if (pref_path) SDL_free(pref_path);
-     if (small_font)
-          TTF_CloseFont(small_font);
-     if (medium_font)
-          TTF_CloseFont(medium_font);
-     if (large_font)
-          TTF_CloseFont(large_font);
-     if (gigantic_font)
-          TTF_CloseFont(gigantic_font);
+
+     // FIX: the font-fallback chain added at startup can make small_font,
+     // medium_font, large_font, gigantic_font all point to the SAME
+     // TTF_Font* (when some files failed to load and we reused whichever
+     // one succeeded). Closing the same pointer more than once is a
+     // double-free / use-after-free crash. Dedupe before closing.
+     {
+          TTF_Font *fontsToClose[4] = {small_font, medium_font, large_font, gigantic_font};
+          for (int i = 0; i < 4; i++)
+          {
+               if (!fontsToClose[i]) continue;
+               bool alreadyClosed = false;
+               for (int j = 0; j < i; j++)
+               {
+                    if (fontsToClose[j] == fontsToClose[i]) { alreadyClosed = true; break; }
+               }
+               if (!alreadyClosed)
+                    TTF_CloseFont(fontsToClose[i]);
+          }
+     }
      if (snd_roll)
           Mix_FreeChunk(snd_roll);
      if (snd_move)
@@ -3800,9 +3946,14 @@ int main(int argc, char **argv)
           Mix_FreeChunk(snd_click);
      if (snd_error)
           Mix_FreeChunk(snd_error);
+     // FIX: destroy all cached text textures before the renderer goes away
+     // (destroying a texture after its renderer is gone / SDL_Quit() can
+     // crash or log errors depending on platform).
+     destroy_text_cache();
      SDL_DestroyRenderer(renderer);
      SDL_DestroyWindow(window);
      Mix_CloseAudio();
+     Mix_Quit();
      TTF_Quit();
      SDL_Quit();
      return 0;
