@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android color resources for Snadder Game -->
+<resources>
+    <!-- Primary colors matching the game's Ocean Blue / Amethyst gradient -->
+    <color name="primary">#2980B9</color>
+    <color name="primary_dark">#1A5276</color>
+    <color name="accent">#9B59B6</color>
+
+    <!-- Background -->
+    <color name="background">#2C3E50</color>
+
+    <!-- Status bar / navigation bar -->
+    <color name="status_bar">#1A1A2E</color>
+
+    <!-- Splash / loading -->
+    <color name="splash_background">#2980B9</color>
+</resources>

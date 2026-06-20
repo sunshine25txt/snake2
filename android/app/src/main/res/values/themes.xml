@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Theme configuration for Snadder Game
+    Uses a fullscreen no-action-bar theme since SDL2 handles all rendering.
+-->
+<resources>
+    <style name="Theme.SnadderGame" parent="android:Theme.DeviceDefault.NoActionBar.Fullscreen">
+        <!-- Status bar color (hidden by fullscreen, but set for edge cases) -->
+        <item name="android:statusBarColor">@color/status_bar</item>
+        <!-- Navigation bar color -->
+        <item name="android:navigationBarColor">@color/status_bar</item>
+        <!-- Window background while SDL surface initializes -->
+        <item name="android:windowBackground">@color/splash_background</item>
+        <!-- Keep screen on during gameplay -->
+        <item name="android:keepScreenOn">true</item>
+    </style>
+</resources>

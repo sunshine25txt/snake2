@@ -1,0 +1,91 @@
+// App-level build.gradle for Snadder Game
+// =========================================
+
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.snadder.game'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.snadder.game"
+        minSdk 21
+        targetSdk 35
+        versionCode 1
+        versionName "1.2"
+
+        // Build native code with ndk-build (Android.mk)
+        externalNativeBuild {
+            ndkBuild {
+                arguments "APP_PLATFORM=android-21"
+                abiFilters 'arm64-v8a', 'armeabi-v7a'
+            }
+        }
+
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
+        }
+    }
+
+    // Point to the JNI build files
+    externalNativeBuild {
+        ndkBuild {
+            path 'src/main/jni/Android.mk'
+        }
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+            jniDebuggable true
+            minifyEnabled false
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+
+            // Use signing config if keystore is available
+            // For CI, the workflow sets up signing via environment variables
+            signingConfig signingConfigs.debug  // fallback to debug signing
+        }
+    }
+
+    // Source sets: explicitly include assets directory
+    sourceSets {
+        main {
+            assets.srcDirs = ['src/main/assets']
+            jniLibs.srcDirs = ['src/main/jniLibs']
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // Prevent packaging conflicts with native libs
+    packagingOptions {
+        // Don't strip debug symbols from native libs in debug builds
+        doNotStrip '**/*.so'
+
+        // Exclude duplicate files that SDL might include
+        exclude 'META-INF/LICENSE'
+        exclude 'META-INF/NOTICE'
+    }
+
+    // Lint configuration
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+
+    // Specify the NDK version for reproducible builds
+    // NDK 27.2.12479018 is the latest stable compatible with AGP 8.7.3
+    ndkVersion "27.2.12479018"
+}
+
+dependencies {
+    // No Java/Kotlin dependencies needed — pure native SDL app
+}

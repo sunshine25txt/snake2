@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android string resources for Snadder Game -->
+<resources>
+    <string name="app_name">Snadder Game</string>
+</resources>

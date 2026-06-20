@@ -1,0 +1,41 @@
+# ==============================================================================
+# .gitignore for Snadder Game
+# ==============================================================================
+
+# --- Android Build ---
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/src/main/jni/src/
+android/app/src/main/java/org/
+android/app/src/main/java/com/snadder/game/SnadderActivity.java
+android/app/src/main/assets/font/
+android/app/src/main/assets/sound/
+android/app/src/main/assets/questions.csv
+
+# SDL2 vendor (cloned by setup script — large, don't commit)
+android/SDL2-vendor/
+
+# Gradle wrapper JAR (downloaded by setup script)
+# Uncomment the next line if you prefer to NOT commit the wrapper jar
+# android/gradle/wrapper/gradle-wrapper.jar
+
+# --- IDE ---
+.idea/
+*.iml
+.vscode/
+*.code-workspace
+
+# --- Build outputs ---
+*.o
+*.so
+*.a
+*.apk
+*.exe
+*.dll
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
