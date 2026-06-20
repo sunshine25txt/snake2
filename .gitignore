@@ -15,6 +15,7 @@ android/app/src/main/assets/sound/
 android/app/src/main/assets/questions.csv
 android/android-sdk/
 android/cmdline-tools.zip
+android/app/src/main/obj/
 
 # SDL2 vendor (cloned by setup script — large, don't commit)
 android/SDL2-vendor/

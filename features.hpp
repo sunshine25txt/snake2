@@ -1,7 +1,11 @@
 #ifndef FEATURES_HPP
 #define FEATURES_HPP
 
+#ifdef __ANDROID__
+#include <SDL.h>
+#else
 #include <SDL2/SDL.h>
+#endif
 #include <string>
 #include <vector>
 #include <ctime>

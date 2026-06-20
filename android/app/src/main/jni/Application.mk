@@ -20,3 +20,6 @@ APP_PLATFORM := android-21
 
 # Enable short commands to avoid command-line-too-long errors on Windows
 APP_SHORT_COMMANDS := true
+
+# Allow missing optional dependencies (like wavpack/gme for SDL2_mixer)
+APP_ALLOW_MISSING_DEPS := true

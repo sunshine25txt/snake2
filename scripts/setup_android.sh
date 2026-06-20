@@ -74,7 +74,7 @@ clone_sdl_repo() {
     else
         echo "  → Cloning $name ($branch)..."
         rm -rf "$target_dir"
-        git clone --depth 1 --branch "$branch" "$repo_url" "$target_dir" 2>&1 | tail -1
+        git clone --depth 1 --recursive --branch "$branch" "$repo_url" "$target_dir" 2>&1 | tail -1
         echo "  ✓ $name cloned"
     fi
 }
@@ -331,11 +331,11 @@ set -- \
 
 # Use "exec" only on non-cygwin systems, as cygwin has a known issue with exec.
 if "$cygwin" ; then
-    eval "set -- $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS"
-    "$JAVACMD" "$@"
+    eval "set -- \$DEFAULT_JVM_OPTS \$JAVA_OPTS \$GRADLE_OPTS \"\\\$@\""
+    "\$JAVACMD" "\$@"
 else
-    eval "set -- $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS"
-    exec "$JAVACMD" "$@"
+    eval "set -- \$DEFAULT_JVM_OPTS \$JAVA_OPTS \$GRADLE_OPTS \"\\\$@\""
+    exec "\$JAVACMD" "\$@"
 fi
 GRADLEW_EOF
     chmod +x "$ANDROID_DIR/gradlew"
